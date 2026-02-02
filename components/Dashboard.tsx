@@ -5,6 +5,8 @@ import MetricsGrid from "./MetricsGrid";
 import LeadsByStatusChart from "./LeadsByStatusChart";
 import LeadsByCategoryChart from "./LeadsByCategoryChart";
 import TopDestinationsTable from "./TopDestinationsTable";
+import AgentPerformanceTable from "./AgentPerformanceTable";
+import WeeklyTrendChart from "./WeeklyTrendChart";
 import { LeadMetrics } from "@/lib/types/notion";
 
 export default function Dashboard() {
@@ -72,6 +74,13 @@ export default function Dashboard() {
           <MetricsGrid />
         </div>
 
+        {/* Weekly Trend Chart - NUEVO */}
+        {metrics && metrics.weeklyTrend && (
+          <div className="mb-8">
+            <WeeklyTrendChart data={metrics.weeklyTrend} />
+          </div>
+        )}
+
         {/* Charts Section */}
         {metrics && (
           <>
@@ -80,61 +89,16 @@ export default function Dashboard() {
               <LeadsByCategoryChart data={metrics.leadsByCategory} />
             </div>
 
-            {/* Additional Info */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-              {/* Top Destinations */}
-              <TopDestinationsTable destinations={metrics.topDestinations} />
-
-              {/* Leads by Assignee */}
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  👥 Leads por Asesor
-                </h3>
-                {Object.keys(metrics.leadsByAssignee).length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">
-                    No hay datos de asesores disponibles
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {Object.entries(metrics.leadsByAssignee)
-                      .sort(([, a], [, b]) => b - a)
-                      .map(([name, count], index) => {
-                        const total = Object.values(
-                          metrics.leadsByAssignee
-                        ).reduce((sum, c) => sum + c, 0);
-                        const percentage = ((count / total) * 100).toFixed(1);
-
-                        return (
-                          <div
-                            key={index}
-                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                <span className="text-blue-600 font-semibold">
-                                  {name.charAt(0).toUpperCase()}
-                                </span>
-                              </div>
-                              <div>
-                                <p className="font-medium text-gray-900">
-                                  {name || "Sin asignar"}
-                                </p>
-                                <p className="text-sm text-gray-500">
-                                  {count} leads ({percentage}%)
-                                </p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-2xl font-bold text-gray-900">
-                                {count}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
+            {/* Agent Performance Table - NUEVO */}
+            {metrics.agentMetrics && metrics.agentMetrics.length > 0 && (
+              <div className="mb-8">
+                <AgentPerformanceTable agents={metrics.agentMetrics} />
               </div>
+            )}
+
+            {/* Top Destinations */}
+            <div className="mb-8">
+              <TopDestinationsTable destinations={metrics.topDestinations} />
             </div>
 
             {/* Leads by Source */}

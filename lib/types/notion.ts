@@ -47,6 +47,31 @@ export interface LeadMetrics {
   leadsThisWeek: number;
   topDestinations: Array<{ destination: string; count: number }>;
   leadsByAssignee: Record<string, number>;
+  agentMetrics: AgentMetrics[];
+  weeklyTrend: WeeklyData[];
+}
+
+// Métricas por agente
+export interface AgentMetrics {
+  agentName: string;
+  totalLeads: number;
+  leadsGanados: number;
+  leadsPerdidos: number;
+  leadsEnProceso: number;
+  conversionRate: number;
+  leadsByCategory: Record<string, number>;
+  leadsBySource: Record<string, number>;
+}
+
+// Datos semanales para gráfico de tendencia
+export interface WeeklyData {
+  weekLabel: string; // "Semana 1", "Semana 2", etc.
+  startDate: string;
+  endDate: string;
+  totalLeads: number;
+  ganados: number;
+  perdidos: number;
+  enProceso: number;
 }
 
 // Filtros para el dashboard

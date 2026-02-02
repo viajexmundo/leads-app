@@ -60,21 +60,21 @@ export function notionPageToLead(page: any): Lead {
 
   return {
     id: page.id,
-    company: extractPropertyValue(props.Company || props.Empresa || props.Nombre || props.Name),
-    category: extractPropertyValue(props.Category || props.Categoría || props.Fase),
-    status: extractPropertyValue(props.Status || props.Estado),
-    createdBy: extractPropertyValue(props["Created by"] || props["Creado por"]),
-    assignedTo: extractPropertyValue(props["Assigned to"] || props["Asignado a"] || props.Asesor),
-    createdTime: page.created_time,
-    lastEditedTime: page.last_edited_time,
+    company: extractPropertyValue(props.Company || props.Empresa || props.Nombre),
+    category: extractPropertyValue(props.Category || props.Categoría),
+    status: extractPropertyValue(props["Estado de Lead"] || props.Status || props.Estado),
+    createdBy: extractPropertyValue(props["Creado por"] || props["Created by"]),
+    assignedTo: extractPropertyValue(props["Asignado a "] || props["Asignado a"] || props["Assigned to"]),
+    createdTime: extractPropertyValue(props["Fecha de creación"]) || page.created_time,
+    lastEditedTime: extractPropertyValue(props["Última edición"]) || page.last_edited_time,
     email: extractPropertyValue(props.Email),
-    phone: extractPropertyValue(props.Phone || props.Teléfono || props.Telefono),
-    destination: extractPropertyValue(props.Destination || props.Destino),
+    phone: extractPropertyValue(props.Phone || props.Teléfono),
+    destination: extractPropertyValue(props.Destino || props.Destination),
     budget: extractPropertyValue(props.Budget || props.Presupuesto),
-    travelDate: extractPropertyValue(props["Travel Date"] || props["Fecha de Viaje"]),
-    source: extractPropertyValue(props.Source || props.Fuente || props.Origen),
-    notes: extractPropertyValue(props.Notes || props.Notas),
-    numberOfTravelers: extractPropertyValue(props["Travelers"] || props.Viajeros),
+    travelDate: extractPropertyValue(props["Fecha de Ida"] || props["Travel Date"]),
+    source: extractPropertyValue(props["Medio de Captación"] || props.Source || props.Fuente),
+    notes: extractPropertyValue(props["Notas Internas"] || props.Notes || props.Notas),
+    numberOfTravelers: extractPropertyValue(props.Pax || props["Travelers"] || props.Viajeros),
     priority: extractPropertyValue(props.Priority || props.Prioridad),
   };
 }
@@ -145,6 +145,7 @@ export async function getFilteredLeads(filters?: any): Promise<Lead[]> {
 // Calcular métricas de leads
 export function calculateLeadMetrics(leads: Lead[]): LeadMetrics {
   const totalLeads = leads.length;
+  const now = new Date();
 
   // Leads por estado
   const leadsByStatus: Record<string, number> = {};
@@ -179,7 +180,7 @@ export function calculateLeadMetrics(leads: Lead[]): LeadMetrics {
   });
 
   // Tasa de conversión (ganados / total)
-  const wonLeads = leadsByStatus["Ganado"] || 0;
+  const wonLeads = leadsByStatus["Cerrado Ganado"] || leadsByStatus["Ganado"] || 0;
   const conversionRate = totalLeads > 0 ? (wonLeads / totalLeads) * 100 : 0;
 
   // Presupuesto promedio
@@ -189,7 +190,6 @@ export function calculateLeadMetrics(leads: Lead[]): LeadMetrics {
     : 0;
 
   // Leads de este mes
-  const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const leadsThisMonth = leads.filter(
     (l) => new Date(l.createdTime) >= startOfMonth
@@ -216,6 +216,98 @@ export function calculateLeadMetrics(leads: Lead[]): LeadMetrics {
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
+  // ======= NUEVO: Métricas por agente =======
+  const agentMetrics: import("./types/notion").AgentMetrics[] = [];
+  const agentNames = Object.keys(leadsByAssignee);
+
+  agentNames.forEach((agentName) => {
+    const agentLeads = leads.filter((l) => l.assignedTo === agentName);
+    const agentLeadsTotal = agentLeads.length;
+
+    const ganados = agentLeads.filter((l) =>
+      l.status === "Cerrado Ganado" || l.status === "Ganado"
+    ).length;
+
+    const perdidos = agentLeads.filter((l) =>
+      l.status === "Cerrado Perdido" || l.status === "Perdido"
+    ).length;
+
+    const enProceso = agentLeadsTotal - ganados - perdidos;
+
+    const agentConversionRate = agentLeadsTotal > 0
+      ? (ganados / agentLeadsTotal) * 100
+      : 0;
+
+    // Leads por categoría para este agente
+    const agentLeadsByCategory: Record<string, number> = {};
+    agentLeads.forEach((lead) => {
+      if (lead.category) {
+        agentLeadsByCategory[lead.category] = (agentLeadsByCategory[lead.category] || 0) + 1;
+      }
+    });
+
+    // Leads por fuente para este agente
+    const agentLeadsBySource: Record<string, number> = {};
+    agentLeads.forEach((lead) => {
+      if (lead.source) {
+        agentLeadsBySource[lead.source] = (agentLeadsBySource[lead.source] || 0) + 1;
+      }
+    });
+
+    agentMetrics.push({
+      agentName,
+      totalLeads: agentLeadsTotal,
+      leadsGanados: ganados,
+      leadsPerdidos: perdidos,
+      leadsEnProceso: enProceso,
+      conversionRate: agentConversionRate,
+      leadsByCategory: agentLeadsByCategory,
+      leadsBySource: agentLeadsBySource,
+    });
+  });
+
+  // Ordenar agentes por total de leads (descendente)
+  agentMetrics.sort((a, b) => b.totalLeads - a.totalLeads);
+
+  // ======= NUEVO: Tendencia semanal (últimas 8 semanas) =======
+  const weeklyTrend: import("./types/notion").WeeklyData[] = [];
+  const weeksToShow = 8;
+
+  for (let i = weeksToShow - 1; i >= 0; i--) {
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay() - (i * 7));
+    weekStart.setHours(0, 0, 0, 0);
+
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const weekLeads = leads.filter((l) => {
+      const leadDate = new Date(l.createdTime);
+      return leadDate >= weekStart && leadDate <= weekEnd;
+    });
+
+    const ganados = weekLeads.filter((l) =>
+      l.status === "Cerrado Ganado" || l.status === "Ganado"
+    ).length;
+
+    const perdidos = weekLeads.filter((l) =>
+      l.status === "Cerrado Perdido" || l.status === "Perdido"
+    ).length;
+
+    const enProceso = weekLeads.length - ganados - perdidos;
+
+    weeklyTrend.push({
+      weekLabel: i === 0 ? "Esta semana" : `Hace ${i} semana${i > 1 ? 's' : ''}`,
+      startDate: weekStart.toISOString(),
+      endDate: weekEnd.toISOString(),
+      totalLeads: weekLeads.length,
+      ganados,
+      perdidos,
+      enProceso,
+    });
+  }
+
   return {
     totalLeads,
     leadsByStatus,
@@ -227,6 +319,8 @@ export function calculateLeadMetrics(leads: Lead[]): LeadMetrics {
     leadsThisWeek,
     topDestinations,
     leadsByAssignee,
+    agentMetrics,
+    weeklyTrend,
   };
 }
 
