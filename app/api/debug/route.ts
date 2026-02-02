@@ -56,23 +56,44 @@ export async function GET() {
         properties: Object.keys((database as any).properties || {}),
       };
 
-      // Test 4: Consultar registros
+      // Test 4: Consultar registros usando fetch
       try {
-        const response = await (notion.databases as any).query({
-          database_id: process.env.NOTION_DATABASE_ID,
-          page_size: 5,
-        });
+        const queryResponse = await fetch(
+          `https://api.notion.com/v1/databases/${process.env.NOTION_DATABASE_ID}/query`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${process.env.NOTION_API_KEY}`,
+              "Notion-Version": "2022-06-28",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              page_size: 5,
+            }),
+          }
+        );
+
+        if (!queryResponse.ok) {
+          const errorData = await queryResponse.json();
+          throw new Error(errorData.message || queryResponse.statusText);
+        }
+
+        const queryData = await queryResponse.json();
 
         diagnostics.tests.databaseQuery = {
           status: "PASSED",
-          recordsFound: response.results.length,
+          recordsFound: queryData.results.length,
         };
 
-        if (response.results.length > 0) {
-          const firstRecord = response.results[0];
+        if (queryData.results.length > 0) {
+          const firstRecord = queryData.results[0];
           diagnostics.tests.sampleRecord = {
             id: firstRecord.id,
             properties: Object.keys(firstRecord.properties),
+            sampleValues: Object.entries(firstRecord.properties).slice(0, 3).map(([key, val]: [string, any]) => ({
+              name: key,
+              type: val.type,
+            })),
           };
         }
       } catch (error: any) {

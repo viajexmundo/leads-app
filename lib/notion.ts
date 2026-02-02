@@ -1,12 +1,24 @@
 import { Client } from "@notionhq/client";
 import { Lead, LeadMetrics } from "./types/notion";
 
-// Inicializar cliente de Notion
-export const notion = new Client({
-  auth: process.env.NOTION_API_KEY,
-});
+// Función para obtener el cliente de Notion
+function getNotionClient() {
+  if (!process.env.NOTION_API_KEY) {
+    throw new Error("NOTION_API_KEY no está configurada");
+  }
 
-const databaseId = process.env.NOTION_DATABASE_ID!;
+  return new Client({
+    auth: process.env.NOTION_API_KEY,
+  });
+}
+
+// Función para obtener el database ID
+function getDatabaseId() {
+  if (!process.env.NOTION_DATABASE_ID) {
+    throw new Error("NOTION_DATABASE_ID no está configurada");
+  }
+  return process.env.NOTION_DATABASE_ID;
+}
 
 // Extraer valor de una propiedad de Notion
 export function extractPropertyValue(property: any): any {
@@ -48,7 +60,7 @@ export function notionPageToLead(page: any): Lead {
 
   return {
     id: page.id,
-    company: extractPropertyValue(props.Company || props.Empresa || props.Nombre),
+    company: extractPropertyValue(props.Company || props.Empresa || props.Nombre || props.Name),
     category: extractPropertyValue(props.Category || props.Categoría || props.Fase),
     status: extractPropertyValue(props.Status || props.Estado),
     createdBy: extractPropertyValue(props["Created by"] || props["Creado por"]),
@@ -70,12 +82,29 @@ export function notionPageToLead(page: any): Lead {
 // Obtener todos los leads
 export async function getAllLeads(): Promise<Lead[]> {
   try {
-    const response = await (notion.databases as any).query({
-      database_id: databaseId,
-      page_size: 100,
+    const notion = getNotionClient();
+    const databaseId = getDatabaseId();
+
+    // Usar fetch directamente para evitar problemas de tipos
+    const response = await fetch("https://api.notion.com/v1/databases/" + databaseId + "/query", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.NOTION_API_KEY}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        page_size: 100,
+      }),
     });
 
-    return response.results.map(notionPageToLead);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Notion API error: ${errorData.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.results.map(notionPageToLead);
   } catch (error) {
     console.error("Error obteniendo leads:", error);
     throw error;
@@ -85,13 +114,28 @@ export async function getAllLeads(): Promise<Lead[]> {
 // Obtener leads con filtros
 export async function getFilteredLeads(filters?: any): Promise<Lead[]> {
   try {
-    const response = await (notion.databases as any).query({
-      database_id: databaseId,
-      filter: filters,
-      page_size: 100,
+    const databaseId = getDatabaseId();
+
+    const response = await fetch("https://api.notion.com/v1/databases/" + databaseId + "/query", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.NOTION_API_KEY}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        filter: filters,
+        page_size: 100,
+      }),
     });
 
-    return response.results.map(notionPageToLead);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Notion API error: ${errorData.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.results.map(notionPageToLead);
   } catch (error) {
     console.error("Error obteniendo leads filtrados:", error);
     throw error;
@@ -105,13 +149,17 @@ export function calculateLeadMetrics(leads: Lead[]): LeadMetrics {
   // Leads por estado
   const leadsByStatus: Record<string, number> = {};
   leads.forEach((lead) => {
-    leadsByStatus[lead.status] = (leadsByStatus[lead.status] || 0) + 1;
+    if (lead.status) {
+      leadsByStatus[lead.status] = (leadsByStatus[lead.status] || 0) + 1;
+    }
   });
 
   // Leads por categoría
   const leadsByCategory: Record<string, number> = {};
   leads.forEach((lead) => {
-    leadsByCategory[lead.category] = (leadsByCategory[lead.category] || 0) + 1;
+    if (lead.category) {
+      leadsByCategory[lead.category] = (leadsByCategory[lead.category] || 0) + 1;
+    }
   });
 
   // Leads por fuente
@@ -185,6 +233,9 @@ export function calculateLeadMetrics(leads: Lead[]): LeadMetrics {
 // Obtener información de la base de datos
 export async function getDatabaseInfo() {
   try {
+    const notion = getNotionClient();
+    const databaseId = getDatabaseId();
+
     const database = await notion.databases.retrieve({
       database_id: databaseId,
     });
