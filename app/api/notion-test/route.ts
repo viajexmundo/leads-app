@@ -15,7 +15,7 @@ export async function GET() {
     });
 
     // Obtener algunos registros de ejemplo
-    const response = await notion.databases.query({
+    const response = await (notion.databases as any).query({
       database_id: databaseId,
       page_size: 5, // Solo 5 registros para ver la estructura
     });

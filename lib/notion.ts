@@ -70,7 +70,7 @@ export function notionPageToLead(page: any): Lead {
 // Obtener todos los leads
 export async function getAllLeads(): Promise<Lead[]> {
   try {
-    const response = await notion.databases.query({
+    const response = await (notion.databases as any).query({
       database_id: databaseId,
       page_size: 100,
     });
@@ -85,7 +85,7 @@ export async function getAllLeads(): Promise<Lead[]> {
 // Obtener leads con filtros
 export async function getFilteredLeads(filters?: any): Promise<Lead[]> {
   try {
-    const response = await notion.databases.query({
+    const response = await (notion.databases as any).query({
       database_id: databaseId,
       filter: filters,
       page_size: 100,
